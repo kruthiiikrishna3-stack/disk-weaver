@@ -4,6 +4,7 @@ import { Navbar } from '@/components/layout/Navbar';
 import { InfiniteGrid } from '@/components/ui/InfiniteGrid';
 import { DiskScene } from '@/components/three/DiskScene';
 import { MetricsPanel } from '@/components/ui/MetricsPanel';
+import { TrackVisualization } from '@/components/ui/TrackVisualization';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
@@ -322,6 +323,21 @@ export default function Simulator() {
               )}
             </motion.div>
           </div>
+
+          {/* 2D Track Visualization */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="mt-6"
+          >
+            <TrackVisualization
+              result={result}
+              totalTracks={totalTracks}
+              currentStep={currentStep}
+              algorithmId={algorithm}
+            />
+          </motion.div>
         </div>
       </main>
     </div>

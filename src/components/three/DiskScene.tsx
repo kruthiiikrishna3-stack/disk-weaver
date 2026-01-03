@@ -1,4 +1,4 @@
-import { useRef, useMemo, useEffect } from 'react';
+import { useRef, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Text } from '@react-three/drei';
 import * as THREE from 'three';
@@ -11,46 +11,141 @@ interface DiskSceneProps {
   isPlaying: boolean;
 }
 
-function DiskPlatter({ totalTracks }: { totalTracks: number }) {
-  const diskRef = useRef<THREE.Mesh>(null);
+// Particle system for head trail
+function ParticleTrail({ position, totalTracks }: { position: number; totalTracks: number }) {
+  const particlesRef = useRef<THREE.Points>(null);
+  const particleCount = 30;
+  const positions = useMemo(() => new Float32Array(particleCount * 3), []);
+  
+  const radius = 1 + (position / totalTracks) * 4;
 
-  // Create concentric rings for tracks
+  useFrame(() => {
+    if (!particlesRef.current) return;
+    
+    // Shift particles and add new one
+    for (let i = particleCount - 1; i > 0; i--) {
+      positions[i * 3] = positions[(i - 1) * 3];
+      positions[i * 3 + 1] = positions[(i - 1) * 3 + 1];
+      positions[i * 3 + 2] = positions[(i - 1) * 3 + 2];
+    }
+    
+    // Add new particle at head position
+    positions[0] = radius;
+    positions[1] = 0.4 + Math.random() * 0.05;
+    positions[2] = (Math.random() - 0.5) * 0.1;
+    
+    particlesRef.current.geometry.attributes.position.needsUpdate = true;
+  });
+
+  return (
+    <points ref={particlesRef}>
+      <bufferGeometry>
+        <bufferAttribute
+          attach="attributes-position"
+          count={particleCount}
+          array={positions}
+          itemSize={3}
+        />
+      </bufferGeometry>
+      <pointsMaterial
+        color="#FF6B35"
+        size={0.06}
+        transparent
+        opacity={0.7}
+        sizeAttenuation
+        blending={THREE.AdditiveBlending}
+      />
+    </points>
+  );
+}
+
+function CDPlatter({ totalTracks }: { totalTracks: number }) {
+  const groupRef = useRef<THREE.Group>(null);
+
+  // Create track rings for CD grooves effect
   const rings = useMemo(() => {
     const ringArray: JSX.Element[] = [];
-    const trackInterval = Math.max(1, Math.floor(totalTracks / 20)); // Show ~20 rings
+    const trackInterval = Math.max(1, Math.floor(totalTracks / 30));
     
     for (let i = 0; i <= totalTracks; i += trackInterval) {
-      const radius = 1 + (i / totalTracks) * 4; // Inner radius 1, outer radius 5
-      const geometry = new THREE.RingGeometry(radius - 0.02, radius + 0.02, 64);
+      const radius = 1 + (i / totalTracks) * 4;
       ringArray.push(
-        <mesh key={i} rotation-x={-Math.PI / 2} position-y={0.26}>
-          <primitive object={geometry} />
-          <meshBasicMaterial color="#3A5A84" transparent opacity={0.3} side={THREE.DoubleSide} />
+        <mesh key={i} rotation-x={-Math.PI / 2} position-y={0.052}>
+          <ringGeometry args={[radius - 0.01, radius + 0.01, 128]} />
+          <meshBasicMaterial 
+            color="#A0D2DB" 
+            transparent 
+            opacity={0.15} 
+            side={THREE.DoubleSide} 
+          />
         </mesh>
       );
     }
     return ringArray;
   }, [totalTracks]);
 
+  useFrame((state) => {
+    if (groupRef.current) {
+      groupRef.current.rotation.y = state.clock.elapsedTime * 0.1;
+    }
+  });
+
   return (
-    <group>
-      {/* Main disk platter */}
-      <mesh ref={diskRef} rotation-x={-Math.PI / 2}>
-        <cylinderGeometry args={[5.5, 5.5, 0.5, 64]} />
+    <group ref={groupRef}>
+      {/* Main CD disk - shiny silver surface */}
+      <mesh rotation-x={-Math.PI / 2}>
+        <cylinderGeometry args={[5.5, 5.5, 0.08, 128]} />
         <meshStandardMaterial
-          color="#1A2F42"
-          metalness={0.8}
-          roughness={0.2}
+          color="#C0C8D0"
+          metalness={0.95}
+          roughness={0.05}
+          envMapIntensity={1.5}
+        />
+      </mesh>
+
+      {/* Rainbow iridescent layer */}
+      <mesh rotation-x={-Math.PI / 2} position-y={0.045}>
+        <ringGeometry args={[1.0, 5.4, 128]} />
+        <meshStandardMaterial
+          color="#E8F4F8"
+          metalness={0.9}
+          roughness={0.1}
+          transparent
+          opacity={0.6}
+        />
+      </mesh>
+
+      {/* CD center label area (white/silver) */}
+      <mesh rotation-x={-Math.PI / 2} position-y={0.05}>
+        <ringGeometry args={[0.6, 1.0, 64]} />
+        <meshStandardMaterial 
+          color="#F8FAFC" 
+          metalness={0.3} 
+          roughness={0.4}
         />
       </mesh>
       
-      {/* Center spindle */}
-      <mesh rotation-x={-Math.PI / 2} position-y={0.3}>
-        <cylinderGeometry args={[0.8, 0.8, 0.6, 32]} />
-        <meshStandardMaterial color="#0A1929" metalness={0.9} roughness={0.1} />
+      {/* Center hole */}
+      <mesh rotation-x={-Math.PI / 2} position-y={0.05}>
+        <ringGeometry args={[0.25, 0.6, 64]} />
+        <meshStandardMaterial 
+          color="#334155" 
+          metalness={0.8} 
+          roughness={0.2}
+        />
+      </mesh>
+
+      {/* Outer rim highlight */}
+      <mesh rotation-x={-Math.PI / 2} position-y={0.05}>
+        <ringGeometry args={[5.35, 5.5, 128]} />
+        <meshBasicMaterial 
+          color="#06B6D4" 
+          transparent 
+          opacity={0.3}
+        />
       </mesh>
       
-      {/* Track rings */}
+      {/* Track groove rings */}
       {rings}
     </group>
   );
@@ -65,31 +160,51 @@ function DiskHead({
 }) {
   const headRef = useRef<THREE.Group>(null);
   const targetRadius = 1 + (position / totalTracks) * 4;
+  const glowRef = useRef<THREE.PointLight>(null);
 
   useFrame((state, delta) => {
     if (headRef.current) {
-      // Smooth interpolation to target position
       const currentX = headRef.current.position.x;
-      headRef.current.position.x = THREE.MathUtils.lerp(currentX, targetRadius, delta * 3);
+      headRef.current.position.x = THREE.MathUtils.lerp(currentX, targetRadius, delta * 4);
+    }
+    if (glowRef.current) {
+      glowRef.current.intensity = 0.6 + Math.sin(state.clock.elapsedTime * 5) * 0.2;
     }
   });
 
   return (
-    <group ref={headRef} position={[targetRadius, 0.5, 0]}>
-      {/* Head arm */}
-      <mesh rotation-z={Math.PI / 2}>
-        <boxGeometry args={[0.15, 1.5, 0.1]} />
-        <meshStandardMaterial color="#F97316" metalness={0.6} roughness={0.3} />
+    <group ref={headRef} position={[targetRadius, 0.25, 0]}>
+      {/* Head arm base */}
+      <mesh rotation-z={Math.PI / 2} position-y={0.05}>
+        <boxGeometry args={[0.08, 1.0, 0.05]} />
+        <meshStandardMaterial color="#475569" metalness={0.7} roughness={0.3} />
       </mesh>
       
       {/* Read/write head */}
-      <mesh position={[0, 0.1, 0]}>
-        <boxGeometry args={[0.3, 0.1, 0.2]} />
-        <meshStandardMaterial color="#F97316" metalness={0.8} roughness={0.2} emissive="#F97316" emissiveIntensity={0.3} />
+      <mesh position={[0, 0.06, 0]}>
+        <boxGeometry args={[0.15, 0.05, 0.1]} />
+        <meshStandardMaterial 
+          color="#F97316" 
+          metalness={0.6} 
+          roughness={0.3} 
+          emissive="#F97316" 
+          emissiveIntensity={0.4} 
+        />
+      </mesh>
+      
+      {/* Laser point */}
+      <mesh position={[0, 0.02, 0]}>
+        <sphereGeometry args={[0.025, 16, 16]} />
+        <meshBasicMaterial color="#FF4500" />
       </mesh>
       
       {/* Head glow */}
-      <pointLight color="#F97316" intensity={0.5} distance={2} />
+      <pointLight 
+        ref={glowRef}
+        color="#F97316" 
+        intensity={0.6} 
+        distance={1.2} 
+      />
     </group>
   );
 }
@@ -113,10 +228,10 @@ function TrackMarkers({
         const isVisited = visitedTracks.has(track);
         
         return (
-          <group key={index} position={[x, 0.4, z]}>
+          <group key={index} position={[x, 0.15, z]}>
             {/* Marker sphere */}
             <mesh>
-              <sphereGeometry args={[0.12, 16, 16]} />
+              <sphereGeometry args={[0.08, 16, 16]} />
               <meshStandardMaterial
                 color={isVisited ? "#10B981" : "#06B6D4"}
                 emissive={isVisited ? "#10B981" : "#06B6D4"}
@@ -126,8 +241,8 @@ function TrackMarkers({
             
             {/* Track number label */}
             <Text
-              position={[0, 0.3, 0]}
-              fontSize={0.15}
+              position={[0, 0.2, 0]}
+              fontSize={0.1}
               color={isVisited ? "#10B981" : "#06B6D4"}
               anchorX="center"
               anchorY="middle"
@@ -135,11 +250,15 @@ function TrackMarkers({
               {track}
             </Text>
             
-            {/* Pulse ring effect */}
+            {/* Pulse ring for unvisited */}
             {!isVisited && (
               <mesh rotation-x={-Math.PI / 2}>
-                <ringGeometry args={[0.15, 0.2, 32]} />
-                <meshBasicMaterial color="#06B6D4" transparent opacity={0.3} />
+                <ringGeometry args={[0.1, 0.13, 32]} />
+                <meshBasicMaterial 
+                  color="#06B6D4" 
+                  transparent 
+                  opacity={0.35}
+                />
               </mesh>
             )}
           </group>
@@ -149,7 +268,7 @@ function TrackMarkers({
   );
 }
 
-function SeekPath({ 
+function GlowingSeekPath({ 
   sequence, 
   totalTracks,
   currentStep,
@@ -158,7 +277,7 @@ function SeekPath({
   totalTracks: number;
   currentStep: number;
 }) {
-  const points = useMemo(() => {
+  const lineObject = useMemo(() => {
     const pts: THREE.Vector3[] = [];
     const visibleSequence = sequence.slice(0, currentStep + 2);
     
@@ -167,29 +286,40 @@ function SeekPath({
       const angle = (index / sequence.length) * Math.PI * 0.5 - Math.PI / 4;
       pts.push(new THREE.Vector3(
         Math.cos(angle) * radius,
-        0.35,
+        0.12,
         Math.sin(angle) * radius
       ));
     });
+
+    if (pts.length < 2) return null;
+
+    const geometry = new THREE.BufferGeometry().setFromPoints(pts);
     
-    return pts;
+    // Gradient colors
+    const colors: number[] = [];
+    visibleSequence.forEach((_, index) => {
+      const t = index / Math.max(1, visibleSequence.length - 1);
+      const color = new THREE.Color().lerpColors(
+        new THREE.Color('#06B6D4'),
+        new THREE.Color('#10B981'),
+        t
+      );
+      colors.push(color.r, color.g, color.b);
+    });
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    
+    const material = new THREE.LineBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.7,
+    });
+
+    return new THREE.Line(geometry, material);
   }, [sequence, totalTracks, currentStep]);
 
-  if (points.length < 2) return null;
+  if (!lineObject) return null;
 
-  return (
-    <line>
-      <bufferGeometry>
-        <bufferAttribute
-          attach="attributes-position"
-          count={points.length}
-          array={new Float32Array(points.flatMap(p => [p.x, p.y, p.z]))}
-          itemSize={3}
-        />
-      </bufferGeometry>
-      <lineBasicMaterial color="#06B6D4" linewidth={2} />
-    </line>
-  );
+  return <primitive object={lineObject} />;
 }
 
 function Scene({ result, currentStep, totalTracks, isPlaying }: DiskSceneProps) {
@@ -216,21 +346,31 @@ function Scene({ result, currentStep, totalTracks, isPlaying }: DiskSceneProps) 
 
   return (
     <>
-      {/* Lighting */}
+      {/* Lighting setup */}
       <ambientLight intensity={0.4} />
-      <directionalLight position={[10, 10, 5]} intensity={0.8} />
-      <pointLight position={[0, 5, 0]} intensity={0.5} color="#2563EB" />
+      <directionalLight position={[10, 10, 5]} intensity={0.9} color="#FFFFFF" />
+      <directionalLight position={[-5, 8, -5]} intensity={0.4} color="#E0E7FF" />
+      <pointLight position={[0, 6, 0]} intensity={0.5} color="#F1F5F9" />
       
-      {/* Disk components */}
-      <DiskPlatter totalTracks={totalTracks} />
+      {/* CD Disk */}
+      <CDPlatter totalTracks={totalTracks} />
+      
+      {/* Disk Head */}
       <DiskHead position={headPosition} totalTracks={totalTracks} />
+      
+      {/* Particle Trail */}
+      <ParticleTrail position={headPosition} totalTracks={totalTracks} />
+      
+      {/* Track Markers */}
       <TrackMarkers 
         requests={requests} 
         totalTracks={totalTracks} 
         visitedTracks={visitedTracks}
       />
+      
+      {/* Seek Path */}
       {result && (
-        <SeekPath 
+        <GlowingSeekPath 
           sequence={result.sequence} 
           totalTracks={totalTracks}
           currentStep={currentStep}
@@ -245,7 +385,7 @@ function Scene({ result, currentStep, totalTracks, isPlaying }: DiskSceneProps) 
         minPolarAngle={Math.PI / 6}
         maxPolarAngle={Math.PI / 2.5}
         autoRotate={isPlaying}
-        autoRotateSpeed={0.5}
+        autoRotateSpeed={0.4}
       />
     </>
   );
@@ -253,9 +393,9 @@ function Scene({ result, currentStep, totalTracks, isPlaying }: DiskSceneProps) 
 
 export function DiskScene(props: DiskSceneProps) {
   return (
-    <div className="w-full h-full min-h-[400px] rounded-xl overflow-hidden bg-gradient-to-b from-card to-background">
+    <div className="w-full h-full min-h-[400px] rounded-xl overflow-hidden bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
       <Canvas
-        camera={{ position: [8, 6, 8], fov: 50 }}
+        camera={{ position: [7, 5, 7], fov: 50 }}
         gl={{ antialias: true, alpha: true }}
       >
         <Scene {...props} />
